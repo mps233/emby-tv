@@ -137,11 +137,11 @@ function img(url, w, h) {
 }
 
 function embyImage(itemId, kind) {
-  // 客户端只认 mzstatic 的图片地址格式（带 {w}x{h}.{f} 模板）。
-  // 这里伪装成那个域名，由模块的 URL Rewrite 转回本机图片代理。
+  // 真实格式是 /image/thumb/<单段token>/{w}x{h}.{f}，路径段数不能多，
+  // 所以把 id 和变体塞进同一个 token 里：emby-<id>-<p|b|l>
   var raw = String(itemId).replace(/^[a-z]/, "");
-  var variant = kind === "logo" ? "logo" : kind === "primary" ? "primary" : "backdrop";
-  return "https://is1-ssl.mzstatic.com/image/thumb/emby/" + raw + "/" + variant + "/{w}x{h}.{f}";
+  var v = kind === "logo" ? "l" : kind === "primary" ? "p" : "b";
+  return "https://is1-ssl.mzstatic.com/image/thumb/emby-" + raw + "-" + v + "/{w}x{h}.{f}";
 }
 
 function buildTab() {
