@@ -61,6 +61,9 @@ function beacon(tag) {
   } catch (e) {}
 }
 
+// 详情页结构模板：取自真实 Apple 响应，只替换值不动结构，避免客户端解析失败
+var DETAIL_TEMPLATE = {"badges":{"hasSubtitles":true,"hasClosedCaptions":true,"videoQuality":"HD"},"canvas":{"debug":{"isOptedOutForPersonalizedRecommendations":false},"id":"CVS","shelves":[],"url":"CVSURL"},"channels":{},"content":{"contentAvailability":{"availabilityStatus":"Available"},"countriesOfOrigin":[{"countryCode":"US","displayName":"United States"}],"description":"","duration":0,"genres":[],"heroDescription":"","id":"ID","images":{},"isAppleOriginal":true,"originalSpokenLanguages":[{"displayName":"English","locale":"en"}],"playbackModes":["Monoscopic"],"rating":{"displayName":"NR","name":"NR","reason":"for action, violence, language and brief suggestive references.","system":"mpaa","systemType":"movies","value":0},"releaseDate":0,"rolesSummary":[],"seoNoIndex":false,"title":"T","type":"Movie","url":"URL","playables":[]},"contentPersonalizedInfo":{"inUpNext":false,"isAddToUpNextEnabled":true,"isMarkAsWatchedEnabled":true,"isWatched":false},"howToWatch":[{"actions":["Play"],"channelId":"BID","playbackModes":["Monoscopic"],"versionPicker":false,"versions":[{"playableId":"PID","playbackModes":["Monoscopic"]}]}],"playables":{},"smartPlayables":{},"upsellOffers":{}};
+
 var ID_PREFIX = "emby-";
 var FAV = "f0133578"; // playable id 的第三段，固定值即可
 
@@ -137,11 +140,10 @@ function img(url, w, h) {
 }
 
 function embyImage(itemId, kind) {
-  // 真实格式是 /image/thumb/<单段token>/{w}x{h}.{f}，路径段数不能多，
-  // 所以把 id 和变体塞进同一个 token 里：emby-<id>-<p|b|l>
+  // 客户端接受任意 https 图片地址，实测直连源站图片能正常显示，不需要伪装域名。
   var raw = String(itemId).replace(/^[a-z]/, "");
-  var v = kind === "logo" ? "l" : kind === "primary" ? "p" : "b";
-  return "https://is1-ssl.mzstatic.com/image/thumb/emby-" + raw + "-" + v + "/{w}x{h}.{f}";
+  var variant = kind === "logo" ? "logo" : kind === "primary" ? "poster" : "fanart";
+  return base() + "/img/i/" + variant + "/" + raw;
 }
 
 function buildTab() {
@@ -466,78 +468,46 @@ function handleDetail(body, embyId) {
   return embyGet(userPath("/Items/" + embyId + "?Fields=" + FIELDS)).then(function (e) {
     var isMovie = e.Type === "Movie";
     var id = ID_PREFIX + e.Id;
-    var kind = isMovie ? "movie" : "show";
+    var kindUrl = isMovie ? "movie" : "show";
     var seconds = num(Math.round((e.RunTimeTicks || 0) / 10000000), 0);
-    var pageUrl = "https://tv.apple.com/us/" + kind + "/" + slug(e.Name) + "/" + id;
+    var pageUrl = "https://tv.apple.com/us/" + kindUrl + "/" + slug(e.Name) + "/" + id;
 
     var pl = playableObject(e);
     pl.url = pageUrl + "?playableId=" + encodeURIComponent(pl.id);
     pl.serviceId = "emby.local";
     pl.serviceName = "Emby";
-    pl.isItunes = false;
-    pl.locales = [];
-    pl.adLocales = [];
-    pl.subtitledLocales = [];
-    pl.closedCaptionedLocales = [];
-    pl.sdhLocales = [];
-    pl.audioTrackFormats = [];
-    pl.audioTrackLocales = [];
-    pl.primaryLocale = { displayName: "Chinese", locale: "zh" };
-    pl.releaseDate = e.PremiereDate ? Date.parse(e.PremiereDate) : undefined;
-    pl.images = { contentImage: img(embyImage(e.Id, "backdrop"), 3840, 2160) };
 
-    var playables = {};
-    playables[pl.id] = pl;
-
-    var content = buildItem(e);
-    // 详情页渲染强依赖这几项：缺 contentAvailability 会直接显示"内容不可用"
-    content.duration = seconds;
-    content.description = e.Overview || "";
-    content.contentAvailability = { availabilityStatus: "Available" };
-    content.url = pageUrl;
-    content.isAppleOriginal = false;
-    content.countriesOfOrigin = [];
-    content.originalSpokenLanguages = [];
-    content.seoNoIndex = false;
-    content.rolesSummary = [];
-    content.caption = undefined;
-    content.playables = [pl];
-
-    var channels = {};
-    channels[CONFIG.brandId] = buildBrand();
-
-    return {
-      data: {
-        badges: { hasSubtitles: true, hasClosedCaptions: true, videoQuality: "HD" },
-        canvas: {
-          debug: { isOptedOutForPersonalizedRecommendations: false },
-          id: "uts.cvs.pp." + id,
-          shelves: [],
-          url: "https://tv.apple.com/us/room/uts.cvs.pp." + id,
-        },
-        channels: channels,
-        content: content,
-        contentPersonalizedInfo: {
-          inUpNext: false,
-          isAddToUpNextEnabled: true,
-          isMarkAsWatchedEnabled: true,
-          isWatched: false,
-        },
-        howToWatch: [
-          {
-            actions: ["Play"],
-            channelId: CONFIG.brandId,
-            playbackModes: ["Monoscopic"],
-            versionPicker: false,
-            versions: [{ playableId: pl.id, playbackModes: ["Monoscopic"] }],
-          },
-        ],
-        playables: playables,
-        smartPlayables: playables,
-        upsellOffers: {},
-      },
-      utsk: body.utsk,
+    var d = JSON.parse(JSON.stringify(DETAIL_TEMPLATE));
+    d.content.id = id;
+    d.content.type = isMovie ? "Movie" : "Show";
+    d.content.title = e.Name;
+    d.content.description = e.Overview || "";
+    d.content.heroDescription = e.Overview || "";
+    d.content.duration = seconds;
+    d.content.url = pageUrl;
+    d.content.releaseDate = e.PremiereDate ? Date.parse(e.PremiereDate) : 0;
+    d.content.genres = (e.Genres || []).slice(0, 3).map(function (g) {
+      return { id: "emby.genre." + slug(g), name: g, type: "Genre", url: "https://tv.apple.com/us/genre/" + slug(g) + "/emby.genre." + slug(g) };
+    });
+    d.content.images = {
+      contentImage: img(embyImage(e.Id, "backdrop"), 3840, 2160),
+      contentImageTall: img(embyImage(e.Id, "primary"), 1680, 3636),
+      contentLogo: img(embyImage(e.Id, "logo"), 3434, 868),
+      posterArt: img(embyImage(e.Id, "primary"), 3840, 2160),
     };
+    d.content.playables = [pl];
+    if (typeof e.CommunityRating === "number") {
+      d.content.rating = { displayName: e.CommunityRating.toFixed(1), name: "EMBY", reason: "", system: "emby", systemType: "movie", value: Math.round(e.CommunityRating * 10) };
+    }
+    d.channels[CONFIG.brandId] = buildBrand();
+    d.playables[pl.id] = pl;
+    d.smartPlayables[pl.id] = pl;
+    d.canvas.id = "uts.cvs.pp." + id;
+    d.canvas.url = "https://tv.apple.com/us/room/uts.cvs.pp." + id;
+    d.howToWatch[0].channelId = CONFIG.brandId;
+    d.howToWatch[0].versions = [{ playableId: pl.id, playbackModes: ["Monoscopic"] }];
+    log("detail built: " + e.Name);
+    return { data: d, utsk: body.utsk };
   });
 }
 
