@@ -25,6 +25,7 @@ var CONFIG = {
   resumeLimit: 12,
 
   hlsMaxBitrate: "20000000",
+  remuxBase: "http://192.168.50.44:8900",   // 本机 remux 中转服务
 };
 
 // 支持通过模块 argument 覆盖敏感项，避免把 API Key 写进公开脚本：
@@ -278,15 +279,9 @@ function buildCanvas(shelves) {
 }
 
 function hlsUrl(embyId) {
-  return (
-    base() + "/videos/" + embyId + "/master.m3u8" +
-    "?DeviceId=AppleTV-EmbyBridge&MediaSourceId=" + embyId +
-    "&VideoCodec=h264,hevc&AudioCodec=aac,ac3,eac3" +
-    "&MaxStreamingBitrate=" + CONFIG.hlsMaxBitrate +
-    "&SegmentContainer=ts&MinSegments=1&BreakOnNonKeyFrames=true" +
-    "&TranscodingMaxAudioChannels=6&EnableAutoStreamCopy=true" +
-    "&api_key=" + encodeURIComponent(CONFIG.embyApiKey)
-  );
+  // 源站只给 MKV 原始文件、且禁用转码，AVPlayer 无法直接播。
+  // 交给本机 remux 服务：视频流 copy、音轨转 AAC，封装成 fMP4 的 HLS。
+  return CONFIG.remuxBase + "/hls/" + embyId + "/index.m3u8";
 }
 
 function buildPlayable(e) {
