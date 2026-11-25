@@ -472,18 +472,77 @@ function handleCanvas(body) {
 
 function handleDetail(body, embyId) {
   return embyGet(userPath("/Items/" + embyId + "?Fields=" + FIELDS)).then(function (e) {
-    var playables = buildPlayable(e);
+    var isMovie = e.Type === "Movie";
+    var id = ID_PREFIX + e.Id;
+    var kind = isMovie ? "movie" : "show";
+    var seconds = num(Math.round((e.RunTimeTicks || 0) / 10000000), 0);
+    var pageUrl = "https://tv.apple.com/us/" + kind + "/" + slug(e.Name) + "/" + id;
+
+    var pl = playableObject(e);
+    pl.url = pageUrl + "?playableId=" + encodeURIComponent(pl.id);
+    pl.serviceId = "emby.local";
+    pl.serviceName = "Emby";
+    pl.isItunes = false;
+    pl.locales = [];
+    pl.adLocales = [];
+    pl.subtitledLocales = [];
+    pl.closedCaptionedLocales = [];
+    pl.sdhLocales = [];
+    pl.audioTrackFormats = [];
+    pl.audioTrackLocales = [];
+    pl.primaryLocale = { displayName: "Chinese", locale: "zh" };
+    pl.releaseDate = e.PremiereDate ? Date.parse(e.PremiereDate) : undefined;
+    pl.images = { contentImage: img(embyImage(e.Id, "backdrop"), 3840, 2160) };
+
+    var playables = {};
+    playables[pl.id] = pl;
+
     var content = buildItem(e);
+    // 详情页渲染强依赖这几项：缺 contentAvailability 会直接显示"内容不可用"
+    content.duration = seconds;
+    content.description = e.Overview || "";
+    content.contentAvailability = { availabilityStatus: "Available" };
+    content.url = pageUrl;
+    content.isAppleOriginal = false;
+    content.countriesOfOrigin = [];
+    content.originalSpokenLanguages = [];
+    content.seoNoIndex = false;
+    content.rolesSummary = [];
+    content.caption = undefined;
+    content.playables = [pl];
+
     var channels = {};
     channels[CONFIG.brandId] = buildBrand();
+
     return {
       data: {
         badges: { hasSubtitles: true, hasClosedCaptions: true, videoQuality: "HD" },
-        canvas: { id: "uts.cvs.pp." + ID_PREFIX + embyId, shelves: [], url: "https://tv.apple.com/us/room/uts.cvs.pp." + ID_PREFIX + embyId },
+        canvas: {
+          debug: { isOptedOutForPersonalizedRecommendations: false },
+          id: "uts.cvs.pp." + id,
+          shelves: [],
+          url: "https://tv.apple.com/us/room/uts.cvs.pp." + id,
+        },
         channels: channels,
         content: content,
+        contentPersonalizedInfo: {
+          inUpNext: false,
+          isAddToUpNextEnabled: true,
+          isMarkAsWatchedEnabled: true,
+          isWatched: false,
+        },
+        howToWatch: [
+          {
+            actions: ["Play"],
+            channelId: CONFIG.brandId,
+            playbackModes: ["Monoscopic"],
+            versionPicker: false,
+            versions: [{ playableId: pl.id, playbackModes: ["Monoscopic"] }],
+          },
+        ],
         playables: playables,
         smartPlayables: playables,
+        upsellOffers: {},
       },
       utsk: body.utsk,
     };
