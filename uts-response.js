@@ -238,6 +238,8 @@ function buildItem(e) {
       shelfImageBackground: img(embyImage(src.Id, "backdrop"), 1920, 1080),
     },
     genres: genres,
+    playbackModes: ["Monoscopic"],
+    playables: [playableObject(src)],
     heroDescription: src.Overview || "",
     isWatched: false,
     releaseDate: src.PremiereDate ? Date.parse(src.PremiereDate) : undefined,
@@ -284,12 +286,10 @@ function hlsUrl(embyId) {
   return CONFIG.remuxBase + "/hls/" + embyId + "/index.m3u8";
 }
 
-function buildPlayable(e) {
+function playableObject(e) {
   var seconds = num(Math.round((e.RunTimeTicks || 0) / 10000000), 0);
-  var key = CONFIG.brandId + ":" + e.Id + ":" + FAV;
-  var p = {};
-  p[key] = {
-    id: key,
+  return {
+    id: CONFIG.brandId + ":" + e.Id + ":" + FAV,
     airingType: "OnDemand",
     type: "Vod",
     contentType: e.Type === "Movie" ? "Movie" : "Episode",
@@ -306,7 +306,8 @@ function buildPlayable(e) {
     isDownloadable: false,
     isEligibleForPlayerTabs: false,
     entitlementReason: "Free",
-    assets: { hlsUrl: hlsUrl(e.Id), duration: seconds }, // VERIFY: 普通 HLS 能否被系统播放器接管
+    playbackModes: ["Monoscopic"],
+    assets: { hlsUrl: hlsUrl(e.Id), duration: seconds },
     canonicalMetadata: {
       movieTitle: e.Name,
       duration: seconds,
@@ -314,6 +315,12 @@ function buildPlayable(e) {
       images: { contentImage: img(embyImage(e.Id, "backdrop"), 3840, 2160) },
     },
   };
+}
+
+function buildPlayable(e) {
+  var p = {};
+  var obj = playableObject(e);
+  p[obj.id] = obj;
   return p;
 }
 
