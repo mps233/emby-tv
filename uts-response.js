@@ -137,19 +137,11 @@ function img(url, w, h) {
 }
 
 function embyImage(itemId, kind) {
-  // 部分魔改网关（如 UHD）把图片路由重写成 /img/i/{poster|logo|fanart}/{去掉首字母的 id}，
-  // 标准 Emby 的 /Items/{id}/Images/* 会被 301 过去且丢掉尺寸参数，这里直接打裸路由。
-  if (CONFIG.imageStyle === "raw-id") {
-    var raw = String(itemId).replace(/^[a-z]/, "");
-    if (kind === "logo") return base() + "/img/i/logo/" + raw;
-    if (kind === "primary") return base() + "/img/i/poster/" + raw;
-    return base() + "/img/i/fanart/" + raw;
-  }
-  var b = base() + "/emby/Items/" + itemId + "/Images/";
-  var key = "?api_key=" + encodeURIComponent(CONFIG.embyApiKey);
-  if (kind === "backdrop") return b + "Backdrop/0?maxWidth=1920&quality=80&" + key.slice(1);
-  if (kind === "logo") return b + "Logo?maxWidth=800&quality=90&" + key.slice(1);
-  return b + "Primary/0?maxWidth=1000&quality=90&" + key.slice(1);
+  // 客户端只认 mzstatic 的图片地址格式（带 {w}x{h}.{f} 模板）。
+  // 这里伪装成那个域名，由模块的 URL Rewrite 转回本机图片代理。
+  var raw = String(itemId).replace(/^[a-z]/, "");
+  var variant = kind === "logo" ? "logo" : kind === "primary" ? "primary" : "backdrop";
+  return "https://is1-ssl.mzstatic.com/image/thumb/emby/" + raw + "/" + variant + "/{w}x{h}.{f}";
 }
 
 function buildTab() {
